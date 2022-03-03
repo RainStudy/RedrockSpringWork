@@ -49,4 +49,11 @@ interface IBlockingQueue<E> {
      * @param element
      */
     fun remove(element: E)
+
+    /**
+     * 返回第一个元素，但不删除
+     *
+     * @return 若不存在，返回空
+     */
+    fun peek(): E?
 }

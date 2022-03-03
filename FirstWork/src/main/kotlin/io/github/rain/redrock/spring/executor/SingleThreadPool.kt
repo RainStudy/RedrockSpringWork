@@ -1,8 +1,6 @@
 package io.github.rain.redrock.spring.executor
 
 import io.github.rain.redrock.spring.queue.MyBlockingQueue
-import java.util.concurrent.Callable
-import java.util.concurrent.Future
 
 /**
  * io.github.rain.redrock.spring.executor.SingleThreadPool

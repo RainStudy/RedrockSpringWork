@@ -18,7 +18,7 @@ abstract class ThreadPool(
     private val corePoolSize: Int,
     private val maxPoolSize: Int,
     private val keepAliveTime: Long?,
-    private val queue: IBlockingQueue<FutureTask<*>>
+    protected val queue: IBlockingQueue<FutureTask<*>>
 ) {
 
     protected val threads = mutableListOf<Thread>()

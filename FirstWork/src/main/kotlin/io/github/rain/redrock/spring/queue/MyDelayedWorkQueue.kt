@@ -1,22 +1,23 @@
 package io.github.rain.redrock.spring.queue
 
 import java.util.*
+import java.util.concurrent.RunnableScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 
 /**
- * io.rain.redrock.spring.MyBlockingQueue
+ * io.github.rain.redrock.spring.queue.MyDelayedWorkQueue
  * FirstWork
- * 堵塞队列个人实现
  *
  * @author 寒雨
- * @since 2022/3/2 18:26
+ * @since 2022/3/3 11:24
  **/
-class MyBlockingQueue<E>(
+class MyDelayedWorkQueue(
     private val capacity: Int = Int.MAX_VALUE,
-) : IBlockingQueue<E> {
+) : IBlockingQueue<RunnableScheduledFuture<*>> {
 
-    private val list = LinkedList<E>()
+    private val list = LinkedList<RunnableScheduledFuture<*>>()
 
     private val count = AtomicInteger()
 
@@ -30,12 +31,12 @@ class MyBlockingQueue<E>(
 
     private val notFull = putLock.newCondition()
 
-    override fun add(element: E) {
+    override fun add(element: RunnableScheduledFuture<*>) {
         putLock.lockInterruptibly()
         if (count.get() == capacity) {
             error("full!")
         }
-        list.add(element)
+        list.addAndSort(element)
         val c = count.getAndIncrement()
         if (c + 1 < capacity)
             notFull.signal()
@@ -44,12 +45,12 @@ class MyBlockingQueue<E>(
         putLock.unlock()
     }
 
-    override fun offer(element: E): Boolean {
+    override fun offer(element: RunnableScheduledFuture<*>): Boolean {
         putLock.lockInterruptibly()
         if (count.get() == capacity) {
             return false
         }
-        list.add(element)
+        list.addAndSort(element)
         val c = count.getAndIncrement()
         if (c + 1 < capacity)
             notFull.signal()
@@ -59,12 +60,12 @@ class MyBlockingQueue<E>(
         return true
     }
 
-    override fun put(element: E) {
+    override fun put(element: RunnableScheduledFuture<*>) {
         putLock.lockInterruptibly()
         while (count.get() == capacity) {
             notFull.await()
         }
-        list.add(element)
+        list.addAndSort(element)
         val c = count.getAndIncrement()
         if (c + 1 < capacity)
             notFull.signal()
@@ -73,7 +74,7 @@ class MyBlockingQueue<E>(
         putLock.unlock()
     }
 
-    override fun remove(element: E) {
+    override fun remove(element: RunnableScheduledFuture<*>) {
         takeLock.lockInterruptibly()
         val amount = list.filter { it == element }.size
         list.remove(element)
@@ -83,24 +84,6 @@ class MyBlockingQueue<E>(
         if (c == capacity)
             signalNotFull()
         takeLock.unlock()
-    }
-
-    override fun take(): E {
-        takeLock.lockInterruptibly()
-        // 链表为空则进入循环
-        while (count.get() == 0) {
-            // 使当前线程等待
-            notEmpty.await()
-            // 被signal唤醒，并通过循环的条件跳出循环
-        }
-        return list.pollFirst().also {
-            val c = count.getAndDecrement()
-            if (c > 1)
-                notEmpty.signal()
-            if (c == capacity)
-                signalNotFull()
-            takeLock.unlock()
-        }
     }
 
     private fun signalNotFull() {
@@ -121,7 +104,36 @@ class MyBlockingQueue<E>(
         }
     }
 
-    override fun peek(): E? {
+    override fun take(): RunnableScheduledFuture<*> {
+        takeLock.lockInterruptibly()
+        // 链表为空则进入循环
+        while (count.get() == 0) {
+            // 使当前线程等待
+            notEmpty.await()
+            // 被signal唤醒，并通过循环的条件跳出循环
+        }
+        return list.pollFirst().also {
+            val c = count.getAndDecrement()
+            if (c > 1)
+                notEmpty.signal()
+            if (c == capacity)
+                signalNotFull()
+            takeLock.unlock()
+        }
+    }
+
+    private fun LinkedList<RunnableScheduledFuture<*>>.addAndSort(element: RunnableScheduledFuture<*>) {
+        var loc = 0
+        for (i in 0 until size) {
+            if (get(loc) > element) {
+                loc = i
+                break
+            }
+        }
+        add(loc, element)
+    }
+
+    override fun peek(): RunnableScheduledFuture<*>? {
         takeLock.lockInterruptibly()
         return list.peek().also { takeLock.unlock() }
     }
