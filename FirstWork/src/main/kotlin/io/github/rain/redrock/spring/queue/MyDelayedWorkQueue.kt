@@ -15,7 +15,7 @@ import java.util.concurrent.locks.ReentrantLock
  **/
 class MyDelayedWorkQueue(
     private val capacity: Int = Int.MAX_VALUE,
-) : IBlockingQueue<RunnableScheduledFuture<*>> {
+) : IBlockingQueue<Runnable> {
 
     private val list = LinkedList<RunnableScheduledFuture<*>>()
 
@@ -31,12 +31,12 @@ class MyDelayedWorkQueue(
 
     private val notFull = putLock.newCondition()
 
-    override fun add(element: RunnableScheduledFuture<*>) {
+    override fun add(element: Runnable) {
         putLock.lockInterruptibly()
         if (count.get() == capacity) {
             error("full!")
         }
-        list.addAndSort(element)
+        list.addAndSort(element as RunnableScheduledFuture<*>)
         val c = count.getAndIncrement()
         if (c + 1 < capacity)
             notFull.signal()
@@ -45,12 +45,12 @@ class MyDelayedWorkQueue(
         putLock.unlock()
     }
 
-    override fun offer(element: RunnableScheduledFuture<*>): Boolean {
+    override fun offer(element: Runnable): Boolean {
         putLock.lockInterruptibly()
         if (count.get() == capacity) {
             return false
         }
-        list.addAndSort(element)
+        list.addAndSort(element as RunnableScheduledFuture<*>)
         val c = count.getAndIncrement()
         if (c + 1 < capacity)
             notFull.signal()
@@ -60,12 +60,12 @@ class MyDelayedWorkQueue(
         return true
     }
 
-    override fun put(element: RunnableScheduledFuture<*>) {
+    override fun put(element: Runnable) {
         putLock.lockInterruptibly()
         while (count.get() == capacity) {
             notFull.await()
         }
-        list.addAndSort(element)
+        list.addAndSort(element as RunnableScheduledFuture<*>)
         val c = count.getAndIncrement()
         if (c + 1 < capacity)
             notFull.signal()
@@ -74,7 +74,7 @@ class MyDelayedWorkQueue(
         putLock.unlock()
     }
 
-    override fun remove(element: RunnableScheduledFuture<*>) {
+    override fun remove(element: Runnable) {
         takeLock.lockInterruptibly()
         val amount = list.filter { it == element }.size
         list.remove(element)
@@ -112,7 +112,10 @@ class MyDelayedWorkQueue(
             notEmpty.await()
             // 被signal唤醒，并通过循环的条件跳出循环
         }
-        return list.pollFirst().also {
+        val first = list.pollFirst().also {
+            while (it.getDelay(TimeUnit.MILLISECONDS) > 0) {
+//                println(it.getDelay(TimeUnit.MILLISECONDS))
+            }
             val c = count.getAndDecrement()
             if (c > 1)
                 notEmpty.signal()
@@ -120,6 +123,7 @@ class MyDelayedWorkQueue(
                 signalNotFull()
             takeLock.unlock()
         }
+        return first
     }
 
     private fun LinkedList<RunnableScheduledFuture<*>>.addAndSort(element: RunnableScheduledFuture<*>) {

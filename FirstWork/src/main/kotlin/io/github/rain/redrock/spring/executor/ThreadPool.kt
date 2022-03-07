@@ -17,8 +17,8 @@ import java.util.concurrent.FutureTask
 abstract class ThreadPool(
     private val corePoolSize: Int,
     private val maxPoolSize: Int,
-    private val keepAliveTime: Long?,
-    protected val queue: IBlockingQueue<FutureTask<*>>
+    protected val keepAliveTime: Long?,
+    protected val queue: IBlockingQueue<Runnable>
 ) {
 
     protected val threads = mutableListOf<Thread>()

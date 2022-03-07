@@ -1,6 +1,6 @@
 package io.github.rain.redrock.spring.executor
 
-import io.github.rain.redrock.spring.queue.MyBlockingQueue
+import io.github.rain.redrock.spring.queue.MyDelayedWorkQueue
 import java.util.concurrent.Delayed
 import java.util.concurrent.FutureTask
 import java.util.concurrent.RunnableScheduledFuture
@@ -18,7 +18,7 @@ class ScheduledThreadPool(threadsCount: Int, queueSize: Int = 10) : ThreadPool(
     corePoolSize = threadsCount,
     maxPoolSize = threadsCount,
     keepAliveTime = null,
-    queue = MyBlockingQueue(queueSize)
+    queue = MyDelayedWorkQueue(queueSize)
 ), IScheduledThreadPool {
 
     override fun schedule(delay: Long, timeUnit: TimeUnit, task: Runnable): RunnableScheduledFuture<Unit> {
@@ -37,25 +37,24 @@ class ScheduledThreadPool(threadsCount: Int, queueSize: Int = 10) : ThreadPool(
             runnable = task,
             result = Unit,
             time = triggerTime(delay, timeUnit),
-            period = triggerTime(period, timeUnit)
+            period = timeUnit.toMillis(period)
         )
         queue.add(sft)
         return sft
     }
 
     /**
-     * 返回延迟操作的基于nano time的触发时间
+     * 返回延迟操作的触发时间
      *
      * @param delay
      * @return
      */
     private fun triggerTime(delay: Long): Long {
-        return System.nanoTime() +
-                if (delay < Long.MAX_VALUE shr 1) delay else overflowFree(delay)
+        return System.currentTimeMillis() + delay
     }
 
     private fun triggerTime(delay: Long, unit: TimeUnit): Long {
-        return triggerTime(unit.toNanos(if (delay < 0) 0 else delay))
+        return triggerTime(unit.toMillis(if (delay < 0) 0 else delay))
     }
 
     /**
@@ -69,7 +68,7 @@ class ScheduledThreadPool(threadsCount: Int, queueSize: Int = 10) : ThreadPool(
         var d = delay
         val head = queue.peek() as Delayed?
         if (head != null) {
-            val headDelay = head.getDelay(TimeUnit.NANOSECONDS)
+            val headDelay = head.getDelay(TimeUnit.MILLISECONDS)
             if (headDelay < 0 && delay - headDelay < 0) d = Long.MAX_VALUE + headDelay
         }
         return d
@@ -91,6 +90,8 @@ class ScheduledThreadPool(threadsCount: Int, queueSize: Int = 10) : ThreadPool(
         private val runnable: Runnable,
         private val result: V,
         private val sequenceNumber: Long = sequencer.getAndIncrement(),
+        // 安全起见 使用毫秒作为单位
+        // 官方实现是用的纳秒
         private var time: Long,
         private val period: Long = 0
     ) : FutureTask<V>(runnable, result), RunnableScheduledFuture<V> {
@@ -106,17 +107,17 @@ class ScheduledThreadPool(threadsCount: Int, queueSize: Int = 10) : ThreadPool(
                 val diff = time - other.time
                 return if (diff < 0) -1 else if (diff > 0) 1 else if (sequenceNumber < other.sequenceNumber) -1 else 1
             }
-            val diff = getDelay(TimeUnit.NANOSECONDS) - other!!.getDelay(TimeUnit.NANOSECONDS)
+            val diff = getDelay(TimeUnit.MILLISECONDS) - other!!.getDelay(TimeUnit.MILLISECONDS)
             return if (diff < 0) -1 else if (diff > 0) 1 else 0
         }
 
         override fun getDelay(unit: TimeUnit): Long {
-            return unit.convert(time - System.nanoTime(), TimeUnit.NANOSECONDS)
+            return unit.convert(time - System.currentTimeMillis(), TimeUnit.MILLISECONDS)
         }
 
         override fun run() {
             if (!isPeriodic)
-                run()
+                super.run()
             else if (runAndReset()) {
                 setNextRunTime()
                 queue.put(this)
@@ -125,7 +126,7 @@ class ScheduledThreadPool(threadsCount: Int, queueSize: Int = 10) : ThreadPool(
 
         private fun setNextRunTime() {
             val p = period
-            if (p > 0) time += p else time = triggerTime(-p)
+            time += p
         }
     }
 

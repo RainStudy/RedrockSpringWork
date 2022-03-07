@@ -22,7 +22,12 @@ fun main() {
     ) {
         println("REDROCK!")
     }
+//    pool.schedule(delay = 1, timeUnit = TimeUnit.SECONDS) {
+//        println("延迟1秒")
+//    }
+//    pool.schedule(delay = 5, timeUnit = TimeUnit.SECONDS) {
+//        println("延迟5秒")
+//    }
     Thread.sleep(TimeUnit.SECONDS.toMillis(10))
     pool.shutdown()
-
 }
